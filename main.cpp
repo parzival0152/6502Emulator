@@ -18,20 +18,15 @@ struct CPU
 
 	Word PC; //program counter
 
-	Bit C : 1; //status flags
-	Bit Z : 1;
-	Bit I : 1;
-	Bit D : 1;
-	Bit B : 1;
-	Bit V : 1;
-	Bit N : 1;
+	Byte PS; //program status register
+	//NV-BDIZC
 
 	void reset()
 	{
 		A = 0x0;
 		X = 0x0;
 		Y = 0x0;
-		D = 0x0;
+		PS &= 0b11110111;
 		PC = 0x0200;
 		SP = 0x00;
 		for (int i = 0; i < 0xffff; i++)
@@ -71,18 +66,27 @@ struct CPU
 	}
 
 	void LDAFlags() {
-		Z = (A == 0x00);
-		N = ((A & 0b10000000) > 0);
+		if (A == 0x0)
+			PS |= 0x02;
+		else
+			PS &= 0b11111101;
+		PS |= (A & 0b10000000);
 	}
 
 	void LDXFlags() {
-		Z = (X == 0x00);
-		N = ((X & 0b10000000) > 0);
+		if (X == 0x0)
+			PS |= 0x02;
+		else
+			PS &= 0b11111101;
+		PS |= (X & 0b10000000);
 	}
 
 	void LDYFlags() {
-		Z = (Y == 0x00);
-		N = ((Y & 0b10000000) > 0);
+		if (Y == 0x0)
+			PS |= 0x02;
+		else
+			PS &= 0b11111101;
+		PS |= (Y & 0b10000000);
 	}
 
 	void execute() {
@@ -95,7 +99,7 @@ struct CPU
 			case NOP:
 				isRunning = false;
 				break;
-
+#pragma region LDA
 			case LDA_IM:
 				A = fetchNextByte();
 				LDAFlags();
@@ -135,7 +139,8 @@ struct CPU
 				A = fetchByte(fetchWord(fetchNextByte()) + Y);
 				LDAFlags();
 				break;
-
+#pragma endregion
+#pragma region LDX
 			case LDX_IM:
 				X = fetchNextByte();
 				LDXFlags();
@@ -147,12 +152,12 @@ struct CPU
 				break;
 
 			case LDX_ZY:
-				A = fetchByte(fetchNextByte() + X);
+				X = fetchByte(fetchNextByte() + X);
 				LDXFlags();
 				break;
 
 			case LDX_A:
-				A = fetchByte(fetchNextWord());
+				X = fetchByte(fetchNextWord());
 				LDXFlags();
 				break;
 
@@ -160,10 +165,63 @@ struct CPU
 				X = fetchByte(fetchNextWord() + Y);
 				LDXFlags();
 				break;
+#pragma endregion
+#pragma region LDY
+			case LDY_IM:
+				Y = fetchNextByte();
+				LDYFlags();
+				break;
 
+			case LDY_Z:
+				Y = fetchByte(fetchNextByte());
+				LDYFlags();
+				break;
+
+			case LDY_ZX:
+				Y = fetchByte(fetchNextByte() + Y);
+				LDYFlags();
+				break;
+
+			case LDY_A:
+				Y = fetchByte(fetchNextWord());
+				LDYFlags();
+				break;
+
+			case LDY_AX:
+				Y = fetchByte(fetchNextWord() + X);
+				LDYFlags();
+				break;
+#pragma endregion
+#pragma region STA
 			case STA_Z:
 				putByte(fetchNextByte(), A);
 				break;
+
+			case STA_ZX:
+				putByte(fetchNextByte() + X, A);
+				break;
+
+			case STA_A:
+				putByte(fetchNextWord(), A);
+				break;
+
+			case STA_AX:
+				putByte(fetchNextWord() + X, A);
+				break;
+
+			case STA_AY:
+				putByte(fetchNextWord() + Y, A);
+				break;
+
+			case STA_IX:
+				putByte(fetchWord(fetchNextByte() + X), A);
+				break;
+
+			case STA_IY:
+				putByte(fetchWord(fetchNextByte()) + Y, A);
+				break;
+
+#pragma endregion
 
 			default:
 				break;
@@ -176,15 +234,14 @@ int main()
 {
 	CPU cpu;
 	cpu.reset();
-	cpu.Y = 0x04;
-	cpu.MEM[0x0200] = LDA_IY;
+	cpu.MEM[0x0200] = LDY_IM;
 	cpu.MEM[0x0201] = 0x06;
 	cpu.MEM[0x0202] = NOP;
 	cpu.MEM[0x0006] = 0x00;
 	cpu.MEM[0x0007] = 0x80;
 	cpu.MEM[0x8004] = 0xf4;
 	cpu.execute();
-	std::cout << std::bitset<16>(cpu.A) << std::endl;
+	std::cout << std::hex << (int)(cpu.Y) << std::endl;
 	system("pause");
 	return 0;
 }
